@@ -429,3 +429,28 @@ FodyWeavers.xsd
 
 # macOS
 .DS_Store
+
+# Build output
+Project/build/
+build/
+out/
+cmake-build-*/
+
+# Renderi
+Project/output/
+*.ppm
+
+# Visual Studio / IDE
+.vs/
+.vscode/
+.idea/
+*.user
+
+# CMake ostaci ako slučajno pokreneš build u izvornom folderu
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+
+# OS
+Thumbs.db
+.DS_Store
