@@ -20,8 +20,9 @@ abstract: |
   temu BVH ubrzanja. Iz originalnog repozitorija izbacili smo druge dvije knjige, web
   dokumentaciju, pomoćne slike i programe, a iz samog koda uklonili smo zamućenje
   pokreta (motion blur). Dodali smo jedinstven CMake build, mjerenje vremena renderovanja,
-  opisne komentare i uputstvo na bosanskom jeziku. Prvo mjerenje pokazuje da BVH na sceni
-  s oko 480 sfera skraćuje vrijeme renderovanja približno 2,8 puta. Ovaj dokument opisuje
+  opisne komentare i uputstvo na bosanskom jeziku. Prvo mjerenje pokazuje da BVH skraćuje vrijeme
+  renderovanja približno 2,8 puta na sceni s oko 480 sfera i približno 38 puta na
+  finalnoj sceni s oko 3400 primitiva. Ovaj dokument opisuje
   šta je urađeno, šta je izbačeno i zašto, te predstavlja osnovu za paralelizaciju u
   narednoj fazi.
 
@@ -186,24 +187,33 @@ gradi za 400 kutija poda i 1000 malih sfera.
 
 # Prvo mjerenje
 
-Da bismo provjerili da BVH zaista ubrzava renderovanje, uporedili smo scenu 1 s BVH-om
-i bez njega. Verzija bez BVH-a dobija se zakomentarisanjem jedne linije u
-`bouncing_spheres()`, pa se svi objekti testiraju jedan po jedan. Mjerenje smo
+Da bismo provjerili da BVH zaista ubrzava renderovanje, uporedili smo scene 1 i 9 s BVH-om
+i bez njega. U sceni 1 verzija bez BVH-a dobija se zakomentarisanjem jedne linije u
+`bouncing_spheres()`, a u sceni 9 zamjenom oba `bvh_node` objekta (kutije poda i oblak
+sfera) običnom listom `hittable_list`. U oba slučaja se tada svi objekti testiraju jedan
+po jedan. Scenu 9 smo za ovo poređenje renderovali s 20 uzoraka po pikselu, jer bi
+verzija bez BVH-a s 250 uzoraka trajala oko 15 minuta. Mjerenje smo
 izveli na računaru s procesorom Apple M5, uz kompajler Apple clang 21 s optimizacijom
 `-O3`, na jednoj niti. Rezultati su u tabeli 2.
 
 | Scena                                   | Rezolucija | Uzorci / dubina | Bez BVH   | Sa BVH   |
 |-----------------------------------------|------------|-----------------|-----------|----------|
 | 1: `bouncing_spheres` (~480 sfera)      | 400 × 225  | 20 / 50         | 2,74 s    | 0,97 s   |
-| 9: `final_scene`                        | 400 × 400  | 250 / 4         | –         | 23,8 s   |
+| 9: `final_scene` (~3400 primitiva)     | 400 × 400  | 20 / 4          | 73,2 s    | 1,93 s   |
 
 : Vrijeme renderovanja (srednja vrijednost dva pokretanja za scenu 1).
 
-Na sceni 1 BVH skraćuje vrijeme približno 2,8 puta. Bez BVH-a svaka zraka se testira protiv svih
+Na sceni 1 BVH skraćuje vrijeme približno 2,8 puta, a na sceni 9 približno 38 puta.
+Razlika je posljedica broja i rasporeda objekata. U sceni 9 bez BVH-a svaka zraka
+testira 400 kutija od po šest četverouglova (2400 testova) i 1000 malih sfera, dok s
+BVH-om obilazi samo mali broj čvorova duž svoje putanje. Na sceni 1 je objekata manje,
+pa je i ušteda manja. Bez BVH-a svaka zraka se testira protiv svih
 objekata, ali dio vremena otpada na posao koji ne zavisi od broja objekata: generisanje
 zraka, rasijanje na materijalima i generator slučajnih brojeva. Osim toga, stablo se
-obilazi preko virtuelnih poziva i pokazivača `shared_ptr`, što ima svoj trošak. Očekujemo da razlika
-raste s brojem objekata, što ćemo provjeriti u narednoj fazi. Renderovane slike su
+obilazi preko virtuelnih poziva i pokazivača `shared_ptr`, što ima svoj trošak. Ovi rezultati potvrđuju da ubrzanje
+raste s brojem objekata; tu zavisnost ćemo sistematski izmjeriti u narednoj fazi. Za
+poređenje, scena 9 u brzoj testnoj verziji (250 uzoraka po pikselu) s BVH-om traje
+23,8 s. Renderovane slike su
 prikazane na slikama 1 i 2.
 
 ![Scena 1 (bouncing_spheres) renderovana s BVH-om, 20 uzoraka po pikselu.](render_bouncing_spheres.png){width=12cm}
