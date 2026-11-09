@@ -6,6 +6,10 @@
 
 #include "hittable.h"
 #include "material.h"
+#include "rtw_stb_image_write.h"
+
+#include <string>
+#include <vector>
 
 
 class camera {
@@ -24,18 +28,18 @@ class camera {
     double defocus_angle = 0;  // Variation angle of rays through each pixel
     double focus_dist = 10;    // Distance from camera lookfrom point to plane of perfect focus
 
-    void render(const hittable& world) {
+    // Renders the scene and saves the image as a PNG file.
+    // Returns false if the file could not be written.
+    bool render(const hittable& world, const std::string& filename) {
         initialize();
 
-		// Write the PPM image header to standard output
-        std::cout << "P3\n" << image_width << ' ' << image_height << "\n255\n";
+        // Pixel buffer: 3 bytes (R, G, B) per pixel, row by row from the top of the image
+        std::vector<unsigned char> pixels(3 * image_width * image_height);
 
-		// Loop over each pixel in the image, generating rays and accumulating color samples
+        // Loop over each pixel in the image, generating rays and accumulating color samples
         for (int j = 0; j < image_height; j++) {
 
-			// Print progress to standard error
-			// Use clog to write to standard error, so that the progress output does not interfere with the image data being 
-            // written to standard output
+            // Print progress to standard error (clog), so it does not mix with normal output
             std::clog << "\rScanlines remaining: " << (image_height - j) << ' ' << std::flush;
 
             for (int i = 0; i < image_width; i++) {
@@ -44,11 +48,14 @@ class camera {
                     ray r = get_ray(i, j);
                     pixel_color += ray_color(r, max_depth, world);
                 }
-                write_color(std::cout, pixel_samples_scale * pixel_color);
+                color_to_bytes(pixel_samples_scale * pixel_color, &pixels[3 * (j*image_width + i)]);
             }
         }
 
         std::clog << "\rDone.                 \n";
+
+        return stbi_write_png(filename.c_str(), image_width, image_height, 3,
+                              pixels.data(), 3 * image_width) != 0;
     }
 
   private:

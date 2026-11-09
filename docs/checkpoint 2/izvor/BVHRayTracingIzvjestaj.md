@@ -22,7 +22,10 @@ abstract: |
   pokreta (motion blur). Dodali smo jedinstven CMake build, mjerenje vremena renderovanja,
   opisne komentare i uputstvo na bosanskom jeziku. Prvo mjerenje pokazuje da BVH skraćuje vrijeme
   renderovanja približno 2,8 puta na sceni s oko 480 sfera i približno 38 puta na
-  finalnoj sceni s oko 3400 primitiva. Ovaj dokument opisuje
+  finalnoj sceni s oko 3400 primitiva. Program smo zatim proširili prekidačem kojim se
+  pri pokretanju biraju scena i upotreba BVH-a, bez ponovnog kompajliranja; slika se snima
+  kao PNG i automatski otvara, a vrijeme izgradnje scene i renderovanja ispisuje se
+  odvojeno. Ovaj dokument opisuje
   šta je urađeno, šta je izbačeno i zašto, te predstavlja osnovu za paralelizaciju u
   narednoj fazi.
 
@@ -32,7 +35,7 @@ references:
   - "Wald, I., Woop, S., Benthin, C., Johnson, G. S., Ernst, M. (2014). Embree: A Kernel Framework for Efficient CPU Ray Tracing. ACM Transactions on Graphics. embree.org/papers/2014-Siggraph-Embree.pdf."
   - "Waldemarson, G., Doggett, M. (2025). Parallel Axis Split Tasks for Bounding Volume Construction with OpenMP. GRAPP/VISIGRAPP. doi:10.5220/0013317100003912."
   - "Wang, C. i sar. (2022). An Improved Ray Tracing Acceleration Algorithm Based on Bounding Volume Hierarchies. arXiv:2208.10008."
-  - "Barrett, S. stb: single-file public domain libraries for C/C++ (stb_image). github.com/nothings/stb."
+  - "Barrett, S. stb: single-file public domain libraries for C/C++ (stb_image, stb_image_write). github.com/nothings/stb."
 ---
 
 # Uvod
@@ -70,10 +73,11 @@ izvještaje po fazama. Poređenje je dato u tabeli 1.
 
 : Poređenje strukture originalnog i našeg repozitorija.
 
-Folder `Project/src/` sadrži `main.cc` s devet ugrađenih scena i 17 zaglavlja
+Folder `Project/src/` sadrži `main.cc` s devet ugrađenih scena i 18 zaglavlja
 (`.h` datoteka). Za BVH su najvažnija zaglavlja `aabb.h` i `bvh.h`, a ostala pokrivaju
 geometriju (`sphere.h`, `quad.h`, `constant_medium.h`), materijale (`material.h`),
-teksture (`texture.h`, `perlin.h`, `rtw_stb_image.h`), kameru (`camera.h`) i
+teksture (`texture.h`, `perlin.h`, `rtw_stb_image.h`), snimanje slike
+(`rtw_stb_image_write.h`), kameru (`camera.h`) i
 matematičke pomoćne klase (`vec3.h`, `ray.h`, `interval.h`, `rtweekend.h`).
 Renderovane slike se pišu u `Project/output/`, koji je, kao i build folder, isključen
 iz Gita pomoću `.gitignore`.
@@ -117,7 +121,7 @@ položaj kao `center.at(r.time())`. Izmjene su sljedeće:
   (`point3`) umjesto zrake, pa se pri svakom testu presjeka ne računa njegov položaj.
 - `material.h` i `hittable.h`: rasijane zrake u četiri materijala koji rasijavaju svjetlost, kao i zrake u
   transformacijama `translate` i `rotate_y`, više ne prenose vrijeme.
-- `main.cc`: pokretne sfere u scenama 1 i 9 zamijenjene su statičnim sferama u
+- `main.cc`: pokretne sfere u scenama `bouncing_spheres` i `final_scene` zamijenjene su statičnim sferama u
   početnom položaju. Originalne linije su zadržane kao komentar radi poređenja.
 
 Razloga je nekoliko. Prvo, zamućenje pokreta nije dio teme projekta. Drugo, utiče na
@@ -149,10 +153,10 @@ C++11, kao u originalu.
 
 ## Mjerenje vremena renderovanja
 
-U `main()` je dodano mjerenje vremena pomoću `std::chrono::steady_clock`. Vrijeme se
-ispisuje na standardni izlaz za greške (`std::clog`), kao i napredak po redovima, tako
-da ne ulazi u PPM sliku koja se piše na standardni izlaz. Mjeri se cijelo izvršavanje
-odabrane scene: izgradnja scene i BVH stabla te renderovanje.
+U `main()` je dodano mjerenje vremena pomoću `std::chrono::steady_clock`. U prvoj
+verziji mjerilo se samo ukupno vrijeme izvršavanja odabrane scene. U kasnijoj verziji,
+opisanoj u sekciji 6, izgradnja scene (uključujući BVH stablo) i renderovanje mjere se
+odvojeno.
 
 ## Komentari i dokumentacija
 
@@ -181,51 +185,151 @@ testira samo do udaljenosti tog presjeka, čime se odbacuju dalji objekti.
 
 Ovakva podjela je jednostavna i brzo se gradi, ali ne uzima u obzir površinu kutija,
 kao što to rade heuristike zasnovane na površini (SAH) opisane u literaturi [3, 5].
-Zato je ona dobra polazna tačka za poređenje s boljim načinima izgradnje. BVH se
-koristi u sceni 1, gdje se cijela scena pretvara u jedno stablo, i u sceni 9, gdje se
-gradi za 400 kutija poda i 1000 malih sfera.
+Zato je ona dobra polazna tačka za poređenje s boljim načinima izgradnje.
+
+BVH koriste samo dvije funkcije scena: `bouncing_spheres`, u kojoj se cijela scena
+pretvara u jedno stablo, i `final_scene`, u kojoj se grade dva stabla, jedno za 400
+kutija poda i jedno za oblak od 1000 malih sfera. Ostalih sedam scena ima najviše osam
+objekata, pa su svi u običnoj listi `hittable_list`. Kod tako malih scena BVH ne donosi
+ubrzanje: lista od nekoliko objekata prođe se brzo, a testiranje kutija u stablu ima
+svoju cijenu. Ovakva podjela preuzeta je iz originalnog koda [1].
+
+# Prekidač za BVH i pokretanje programa
+
+Za mjerenja u sekciji 7 verziju bez BVH-a dobijali smo ručnom izmjenom koda i ponovnim
+kompajliranjem. Takav postupak je spor i podložan greškama, na primjer ako se izmjena
+zaboravi vratiti. Zato smo program proširili tako da se scena i upotreba BVH-a biraju
+pri pokretanju. Izmjene su razvijene u zasebnoj Git grani `bvhswitch`, a standard
+jezika je i dalje C++11.
+
+## Odabir scene i BVH-a pri pokretanju
+
+Pokrenut bez argumenata, program ispisuje listu scena i pita koju da renderuje. Ako
+odabrana scena koristi BVH, pita i `Koristiti BVH? (d/n)`, pri čemu prazan unos znači
+„da“. Neispravan unos se odbija i pitanje se ponavlja. Scene u meniju prikazane su u
+tabeli 2. Finalna scena se pojavljuje dva puta, kao brza testna verzija i kao verzija
+visokog kvaliteta, pa BVH koriste scene 0, 1 i 9.
+
+| #   | Scena                                    | Sadržaj                          | BVH |
+|-----|------------------------------------------|----------------------------------|-----|
+| 0   | `final_scene`, brza (400 px, 250 / 4)    | oko 3400 primitiva               | da  |
+| 1   | `bouncing_spheres`                       | oko 480 sfera                    | da  |
+| 2   | `checkered_spheres`                      | 2 sfere                          | ne  |
+| 3   | `earth`                                  | 1 sfera                          | ne  |
+| 4   | `perlin_spheres`                         | 2 sfere                          | ne  |
+| 5   | `quads`                                  | 5 četverouglova                  | ne  |
+| 6   | `simple_light`                           | 4 objekta                        | ne  |
+| 7   | `cornell_box`                            | 6 zidova i 2 kutije              | ne  |
+| 8   | `cornell_smoke`                          | 6 zidova i 2 kutije od dima      | ne  |
+| 9   | `final_scene`, visok kvalitet (800 px, 10000 / 40) | oko 3400 primitiva     | da  |
+
+: Scene u meniju programa (uzorci po pikselu / dubina) i upotreba BVH-a.
+
+Isti izbor može se zadati argumentima komandne linije, i tada program ne postavlja
+pitanja. Na primjer, `raytracer 1 --no-bvh --no-open` renderuje scenu 1 bez BVH-a i ne
+otvara sliku, što je pogodno za skripte koje automatski izvode niz mjerenja.
+
+## Prekidač u kodu
+
+U `bvh.h` je dodana globalna zastavica `use_bvh` i funkcija `accelerate()`, koja za
+zadanu listu objekata vraća BVH stablo (`bvh_node`) ako je zastavica uključena, a inače
+običnu listu (`hittable_list`). Obje klase su podklase klase `hittable`, pa ostatak
+programa ne mora znati koju je varijantu dobio. U `main.cc` su tri mjesta na kojima se
+ranije direktno gradio `bvh_node` zamijenjena pozivom `accelerate()`: cijela scena u
+`bouncing_spheres` te kutije poda i oblak sfera u `final_scene`. Zastavica je deklarisana
+kao `extern bool` u zaglavlju i definisana u `main.cc`, jer jednostavniji oblik
+(`inline` varijabla) zahtijeva C++17.
+
+## Izlaz u PNG formatu i automatsko otvaranje
+
+Ranije je program sliku ispisivao u tekstualnom PPM formatu na standardni izlaz, pa ju
+je trebalo preusmjeriti u datoteku znakom `>`, koji se u PowerShellu ponaša drugačije
+nego u cmd-u. Uz to, PPM se na Windowsu ne može otvoriti bez dodatnog programa. Sada
+`camera::render()` boje piksela upisuje u bafer, a na kraju ga snima kao PNG pomoću
+biblioteke `stb_image_write` [6]. Ta biblioteka je već postojala u preuzetom kodu, ali
+se nije koristila. Funkcija `write_color` u `color.h` zamijenjena je funkcijom
+`color_to_bytes`, koja primjenjuje istu gama korekciju i ograničavanje na [0, 255], ali
+rezultat upisuje u bafer.
+
+Slika se snima u folder `output/`, koji program sam pravi ako ne postoji. Ime datoteke
+sadrži broj scene i oznaku `_bvh` ili `_bez_bvh`, na primjer
+`1_bouncing_spheres_bez_bvh.png`, pa se rezultati dva pokretanja ne prepisuju. Nakon
+snimanja slika se otvara u podrazumijevanom pregledniku slika operativnog sistema
+(naredbe `start` na Windowsu, `open` na macOS-u i `xdg-open` na Linuxu).
+
+## Odvojeno mjerenje izgradnje i renderovanja
+
+Funkcije scena više same ne pozivaju renderovanje, nego samo popunjavaju listu objekata i
+podešavaju kameru. Zahvaljujući tome `main()` mjeri dvije faze odvojeno: izgradnju scene,
+koja uključuje i izgradnju BVH stabla, te renderovanje sa snimanjem slike. Na kraju se
+ispisuje sažetak:
+
+```
+Scena:            1 - bouncing_spheres
+BVH:              da
+Izgradnja scene:  0.000 s
+Renderovanje:     4.676 s
+Ukupno:           4.676 s
+Slika:            output/1_bouncing_spheres_bvh.png
+```
+
+Izgradnja BVH-a za scene ovih veličina traje oko 10 ms ili manje, pa je zanemariva u
+odnosu na renderovanje. To se može promijeniti kod scena s mnogo više objekata, što ćemo
+pratiti u narednoj fazi.
 
 # Prvo mjerenje
 
-Da bismo provjerili da BVH zaista ubrzava renderovanje, uporedili smo scene 1 i 9 s BVH-om
-i bez njega. U sceni 1 verzija bez BVH-a dobija se zakomentarisanjem jedne linije u
-`bouncing_spheres()`, a u sceni 9 zamjenom oba `bvh_node` objekta (kutije poda i oblak
-sfera) običnom listom `hittable_list`. U oba slučaja se tada svi objekti testiraju jedan
-po jedan. Scenu 9 smo za ovo poređenje renderovali s 20 uzoraka po pikselu, jer bi
-verzija bez BVH-a s 250 uzoraka trajala oko 15 minuta. Mjerenje smo
+Da bismo provjerili da BVH zaista ubrzava renderovanje, uporedili smo scene
+`bouncing_spheres` i `final_scene` s BVH-om i bez njega. Ovo mjerenje izvedeno je prije
+uvođenja prekidača, ručnom izmjenom koda: u `bouncing_spheres()` je zakomentarisana jedna
+linija, a u `final_scene()` su oba `bvh_node` objekta (kutije poda i oblak sfera)
+zamijenjena običnom listom `hittable_list`. U oba slučaja se tada svi objekti testiraju
+jedan po jedan. Obje scene smo za ovo poređenje renderovali s 20 uzoraka po pikselu, jer
+bi finalna scena bez BVH-a s 250 uzoraka trajala oko 15 minuta. Mjerenje smo
 izveli na računaru s procesorom Apple M5, uz kompajler Apple clang 21 s optimizacijom
-`-O3`, na jednoj niti. Rezultati su u tabeli 2.
+`-O3`, na jednoj niti. Rezultati su u tabeli 3.
 
 | Scena                                   | Rezolucija | Uzorci / dubina | Bez BVH   | Sa BVH   |
 |-----------------------------------------|------------|-----------------|-----------|----------|
-| 1: `bouncing_spheres` (~480 sfera)      | 400 × 225  | 20 / 50         | 2,74 s    | 0,97 s   |
-| 9: `final_scene` (~3400 primitiva)     | 400 × 400  | 20 / 4          | 73,2 s    | 1,93 s   |
+| `bouncing_spheres` (~480 sfera)         | 400 × 225  | 20 / 50         | 2,74 s    | 0,97 s   |
+| `final_scene` (~3400 primitiva)         | 400 × 400  | 20 / 4          | 73,2 s    | 1,93 s   |
 
-: Vrijeme renderovanja (srednja vrijednost dva pokretanja za scenu 1).
+: Vrijeme renderovanja (za `bouncing_spheres` srednja vrijednost dva pokretanja).
 
-Na sceni 1 BVH skraćuje vrijeme približno 2,8 puta, a na sceni 9 približno 38 puta.
-Razlika je posljedica broja i rasporeda objekata. U sceni 9 bez BVH-a svaka zraka
+Na sceni `bouncing_spheres` BVH skraćuje vrijeme približno 2,8 puta, a na sceni
+`final_scene` približno 38 puta. Razlika je posljedica broja i rasporeda objekata. U
+finalnoj sceni bez BVH-a svaka zraka
 testira 400 kutija od po šest četverouglova (2400 testova) i 1000 malih sfera, dok s
-BVH-om obilazi samo mali broj čvorova duž svoje putanje. Na sceni 1 je objekata manje,
+BVH-om obilazi samo mali broj čvorova duž svoje putanje. U sceni `bouncing_spheres` je objekata manje,
 pa je i ušteda manja. Bez BVH-a svaka zraka se testira protiv svih
 objekata, ali dio vremena otpada na posao koji ne zavisi od broja objekata: generisanje
 zraka, rasijanje na materijalima i generator slučajnih brojeva. Osim toga, stablo se
 obilazi preko virtuelnih poziva i pokazivača `shared_ptr`, što ima svoj trošak. Ovi rezultati potvrđuju da ubrzanje
 raste s brojem objekata; tu zavisnost ćemo sistematski izmjeriti u narednoj fazi. Za
-poređenje, scena 9 u brzoj testnoj verziji (250 uzoraka po pikselu) s BVH-om traje
-23,8 s. Renderovane slike su
-prikazane na slikama 1 i 2.
+poređenje, brza testna verzija finalne scene (250 uzoraka po pikselu) s BVH-om traje
+23,8 s. Renderovane slike su prikazane na slikama 1 i 2.
 
-![Scena 1 (bouncing_spheres) renderovana s BVH-om, 20 uzoraka po pikselu.](render_bouncing_spheres.png){width=12cm}
+Nakon uvođenja prekidača mjerenje smo ponovili bez izmjene koda, sa zadanim parametrima
+scene 1 (100 uzoraka po pikselu): bez BVH-a renderovanje traje 13,5 s, a s BVH-om 4,7 s,
+što je ubrzanje od približno 2,9 puta i odgovara rezultatu iz tabele 3. Slike dobijene s
+BVH-om i bez njega su identične do bajta. To je i očekivano: generator slučajnih brojeva
+nema postavljen početni broj (seed), pa svako pokretanje gradi istu scenu, a izgradnja i
+obilazak BVH-a ne troše slučajne brojeve. Time je potvrđeno da BVH samo ubrzava
+pronalaženje najbližeg presjeka, a ne mijenja rezultat renderovanja.
 
-![Scena 9 (final_scene) u brzoj testnoj verziji: 250 uzoraka po pikselu, dubina 4.](render_final_scene.png){width=10cm}
+![Scena bouncing_spheres renderovana s BVH-om, 20 uzoraka po pikselu.](render_bouncing_spheres.png){width=12cm}
+
+![Scena final_scene u brzoj testnoj verziji (scena 0 u meniju): 250 uzoraka po pikselu, dubina 4.](render_final_scene.png){width=10cm}
 
 # Naredni koraci
 
 Na osnovu pročišćenog koda u sljedećoj fazi planiramo:
 
-- odvojeno mjerenje vremena izgradnje BVH-a i vremena renderovanja, kako je
-  predloženo u Checkpointu 1 [4];
+- korištenje odvojenog mjerenja izgradnje i renderovanja, kako je predloženo u
+  Checkpointu 1 [4], uz skriptu koja pomoću argumenata komandne linije pokreće sve
+  scene s BVH-om i bez njega i upisuje vremena u CSV datoteku;
+- provjeru builda i automatskog otvaranja slike na Windowsu (MSVC), jer su izmjene
+  iz sekcije 6 testirane samo na macOS-u;
 - scene s većim i podesivim brojem objekata, radi mjerenja kako ubrzanje raste s
   veličinom scene;
 - paralelizaciju renderovanja po redovima slike pomoću OpenMP-a; pri tome generator

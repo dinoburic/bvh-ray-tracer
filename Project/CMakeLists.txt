@@ -15,6 +15,7 @@ include_directories(src)
 add_executable(raytracer
     src/main.cc
     src/external/stb_image.h
+    src/external/stb_image_write.h
     src/aabb.h
     src/bvh.h
     src/camera.h
@@ -28,6 +29,7 @@ add_executable(raytracer
     src/quad.h
     src/ray.h
     src/rtw_stb_image.h
+    src/rtw_stb_image_write.h
     src/rtweekend.h
     src/sphere.h
     src/texture.h

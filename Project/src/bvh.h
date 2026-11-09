@@ -101,4 +101,16 @@ class bvh_node : public hittable {
 };
 
 
+// Global BVH switch, defined in main.cc and set from the user's choice at startup.
+// When false, accelerate() returns a plain list, so every object is tested one by one.
+// This lets us measure the speed-up gained from the BVH without recompiling.
+extern bool use_bvh;
+
+inline shared_ptr<hittable> accelerate(const hittable_list& list) {
+    if (use_bvh)
+        return make_shared<bvh_node>(list);
+    return make_shared<hittable_list>(list);
+}
+
+
 #endif

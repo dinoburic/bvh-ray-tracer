@@ -1,7 +1,7 @@
 #ifndef COLOR_H
 #define COLOR_H
 //==============================================================================================
-// WRITEING COLOR IN PPM FORMAT
+// COLOR TYPE AND CONVERSION OF PIXEL COLORS TO BYTES
 //==============================================================================================
 
 #include "interval.h"
@@ -19,10 +19,10 @@ inline double linear_to_gamma(double linear_component)
     return 0;
 }
 
-// function to write a color to an output stream, applying gamma correction and clamping
-// the color values to the range [0, 255].
-// with this we write ppm files
-void write_color(std::ostream& out, const color& pixel_color) {
+// Converts a pixel color to three bytes (R, G, B) and stores them at out[0..2].
+// Gamma correction is applied and the values are clamped to the range [0, 255],
+// which is what the PNG image format expects.
+inline void color_to_bytes(const color& pixel_color, unsigned char* out) {
     auto r = pixel_color.x();
     auto g = pixel_color.y();
     auto b = pixel_color.z();
@@ -33,15 +33,10 @@ void write_color(std::ostream& out, const color& pixel_color) {
     b = linear_to_gamma(b);
 
     // Translate the [0,1] component values to the byte range [0,255]
-	// becuase the PPM format expects color values in this range
     static const interval intensity(0.000, 0.999);
-    int rbyte = int(256 * intensity.clamp(r));
-    int gbyte = int(256 * intensity.clamp(g));
-    int bbyte = int(256 * intensity.clamp(b));
-
-    // Write out the pixel color components.
-    out << rbyte << ' ' << gbyte << ' ' << bbyte << '\n';
+    out[0] = static_cast<unsigned char>(256 * intensity.clamp(r));
+    out[1] = static_cast<unsigned char>(256 * intensity.clamp(g));
+    out[2] = static_cast<unsigned char>(256 * intensity.clamp(b));
 }
-
 
 #endif
