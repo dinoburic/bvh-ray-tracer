@@ -39,7 +39,7 @@ Path tracer u C++-u, rađen prema knjizi *Ray Tracing: The Next Week* (Peter Shi
 ```
 Project/
 ├── CMakeLists.txt
-├── src/              <- main.cc i svi .h fajlovi
+├── src/              <- main.cc, animation.cc i svi .h fajlovi (scenes.h: finalna scena)
 │   └── external/     <- stb_image.h
 ├── images/           <- earthmap.jpg (tekstura)
 └── output/           <- renderovane slike
@@ -90,6 +90,53 @@ build\Release\raytracer > output\image.ppm
 Tokom renderovanja se u terminalu ispisuje preostali broj redova (`Scanlines remaining`).
 
 PPM se može otvoriti npr. u [ImageMagick](https://imagemagick.org/), GIMP-u, IrfanView-u ili online PPM vieweru.
+
+## Animacija (GLFW)
+
+Pored `raytracer`-a, build pravi i program `animation`, koji snima **finalnu scenu iz više uglova**: kamera se kreće po zatvorenoj putanji oko scene (obilazi je sa svih strana, primiče se i udaljava, penje se i spušta), a za svaku poziciju kamere renderuje se jedan frejm. Kad se frejmovi puste jedan za drugim, izgleda kao da se kamera kreće kroz scenu.
+
+- Scena i BVH se grade **jednom**, a zatim se za svaki frejm pomjeri samo kamera.
+- Frejm se renderuje na **svim jezgrima procesora** (redovi slike se dijele nitima).
+- U **GLFW** prozoru se vidi kako se trenutni frejm iscrtava red po red.
+- Svaki gotov frejm se snima kao `output/frames/frame_XXXX.png`.
+- Kad su svi frejmovi gotovi, prozor ih **pušta u petlji** kao video. Posljednji frejm se nastavlja na prvi, pa petlja nema skoka.
+
+**GLFW:** ako je instaliran na sistemu (npr. `brew install glfw`), CMake ga koristi; ako nije, CMake ga sam preuzme i izgradi pri prvom `cmake -B ...` (potreban je internet). Animacija se može isključiti sa `-DBUILD_ANIMATION=OFF`.
+
+Pokretanje (iz foldera `Project/`, da bi se našla tekstura `images/earthmap.jpg`):
+
+```
+# Linux / macOS
+./build/Release/animation
+
+# Windows
+build\Release\animation.exe
+```
+
+Opcije:
+
+| Opcija | Značenje | Podrazumijevano |
+|---|---|---|
+| `--frames N` | broj frejmova za jedan krug kamere | 72 |
+| `--width W` | širina = visina frejma u pikselima | 400 |
+| `--spp S` | uzorci po pikselu | 50 |
+| `--depth D` | maksimalna dubina zrake | 8 |
+| `--fps F` | brzina reprodukcije u prozoru | 24 |
+| `--threads T` | broj niti (0 = sva jezgra) | 0 |
+| `--out DIR` | folder za PNG frejmove | `output/frames` |
+| `--no-window` | samo renderuje PNG frejmove, bez prozora | — |
+
+Primjer brzog pregleda: `./build/Release/animation --frames 36 --width 200 --spp 20`
+
+Tasteri u prozoru tokom reprodukcije: `SPACE` pauza, `←`/`→` frejm nazad/naprijed, `↑`/`↓` brže/sporije, `ESC` ili `Q` izlaz. Zatvaranje prozora tokom renderovanja prekida rad (već snimljeni frejmovi ostaju).
+
+Od frejmova se može napraviti video pomoću [ffmpeg](https://ffmpeg.org/):
+
+```
+ffmpeg -framerate 24 -i output/frames/frame_%04d.png -c:v libx264 -pix_fmt yuv420p output/animation.mp4
+```
+
+**Napomena:** samo `animation` koristi više niti i zaseban generator slučajnih brojeva po niti (`RTW_MULTITHREADED` u `rtweekend.h`). `raytracer` je i dalje sekvencijalan i radi isto kao prije, pa mjerenja iz izvještaja ostaju uporediva.
 
 ## Odabir scene
 

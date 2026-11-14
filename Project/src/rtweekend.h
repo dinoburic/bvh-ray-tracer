@@ -15,6 +15,11 @@
 #include <limits>
 #include <memory>
 
+#ifdef RTW_MULTITHREADED
+#include <atomic>
+#include <random>
+#endif
+
 
 // C++ Std Usings
 
@@ -34,10 +39,23 @@ inline double degrees_to_radians(double degrees) {
     return degrees * pi / 180.0;
 }
 
+#ifdef RTW_MULTITHREADED
+// std::rand() is not safe to call from several threads at once, so the multi-threaded
+// build (the animation) gives every thread its own generator. Seeds are handed out in the
+// order threads first ask for a number, so the main thread (which builds the scene) always
+// gets the same seed and the scene looks the same on every run.
+inline double random_double() {
+    // Returns a random real in [0,1).
+    static std::atomic<unsigned> next_seed(0);
+    thread_local std::mt19937 generator(5489u + 7919u * next_seed++);
+    return generator() * (1.0 / 4294967296.0);
+}
+#else
 inline double random_double() {
     // Returns a random real in [0,1).
     return std::rand() / (RAND_MAX + 1.0);
 }
+#endif
 
 inline double random_double(double min, double max) {
     // Returns a random real in [min,max).
