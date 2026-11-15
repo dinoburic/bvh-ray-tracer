@@ -53,7 +53,7 @@ GLFW smo dodali na sljedećim mjestima:
 
 - `Project/CMakeLists.txt`: novi cilj `animation`. CMake prvo traži GLFW instaliran
   na sistemu, a ako ga ne nađe, sam preuzme i izgradi GLFW 3.4 (`FetchContent`).
-  Program se povezuje s bibliotekama `glfw`, `OpenGL` i `Threads`. Animacija se može
+  Program se povezuje s bibliotekama `glfw` i `OpenGL`. Animacija se može
   isključiti opcijom `-DBUILD_ANIMATION=OFF`.
 - `Project/src/animation.cc`: novi program, odnosno prozor, putanja kamere,
   renderovanje frejmova i reprodukcija. Gotovi frejmovi se snimaju kao PNG datoteke
@@ -62,11 +62,11 @@ GLFW smo dodali na sljedećim mjestima:
 - `Project/src/scenes.h`: izgradnju finalne scene smo izdvojili u zasebnu funkciju,
   da je koriste i `raytracer` i `animation`.
 - `camera.h`, `color.h` i `rtweekend.h`: male dopune, i to računanje boje jednog
-  piksela, pretvaranje boje u bajtove za PNG i generator slučajnih brojeva po niti,
+  piksela, pretvaranje boje u bajtove za PNG i zaseban generator slučajnih brojeva
   koji se koristi samo u animaciji.
 
-Program `raytracer` je ostao sekvencijalan i radi kao u Checkpointu 2, pa su sva
-mjerenja u nastavku urađena na njemu.
+I animacija se, kao i `raytracer`, renderuje sekvencijalno na jednoj niti. Program
+`raytracer` radi kao u Checkpointu 2, pa su sva mjerenja u nastavku urađena na njemu.
 
 # Profilisanje sekvencijalne izvedbe
 

@@ -96,7 +96,7 @@ PPM se može otvoriti npr. u [ImageMagick](https://imagemagick.org/), GIMP-u, Ir
 Pored `raytracer`-a, build pravi i program `animation`, koji snima **finalnu scenu iz više uglova**: kamera se kreće po zatvorenoj putanji oko scene (obilazi je sa svih strana, primiče se i udaljava, penje se i spušta), a za svaku poziciju kamere renderuje se jedan frejm. Kad se frejmovi puste jedan za drugim, izgleda kao da se kamera kreće kroz scenu.
 
 - Scena i BVH se grade **jednom**, a zatim se za svaki frejm pomjeri samo kamera.
-- Frejm se renderuje na **svim jezgrima procesora** (redovi slike se dijele nitima).
+- Frejm se po defaultu renderuje na **jednoj niti** (sekvencijalno). Opcijom `--threads` se redovi slike mogu podijeliti na više niti.
 - U **GLFW** prozoru se vidi kako se trenutni frejm iscrtava red po red.
 - Svaki gotov frejm se snima kao `output/frames/frame_XXXX.png`.
 - Kad su svi frejmovi gotovi, prozor ih **pušta u petlji** kao video. Posljednji frejm se nastavlja na prvi, pa petlja nema skoka.
@@ -140,7 +140,7 @@ Opcije:
 | `--spp S` | uzorci po pikselu | 50 |
 | `--depth D` | maksimalna dubina zrake | 8 |
 | `--fps F` | brzina reprodukcije u prozoru | 24 |
-| `--threads T` | broj niti (0 = sva jezgra) | 0 |
+| `--threads T` | broj niti (0 = sva jezgra) | 1 |
 | `--out DIR` | folder za PNG frejmove | `output/frames` |
 | `--no-window` | samo renderuje PNG frejmove, bez prozora | — |
 
@@ -164,7 +164,7 @@ ffmpeg -framerate 24 -i output/frames/frame_%04d.png -c:v libx264 -pix_fmt yuv42
 
 Šum opada sa korijenom iz spp: 4× više uzoraka daje upola manje šuma.
 
-Procjena trajanja za 72 frejma (Apple M5, sva jezgra; preračunato iz probnog rendera od ~0,6 s po frejmu za 200×200 i 20 spp):
+Procjena trajanja za 72 frejma (Apple M5; preračunato iz probnog rendera od ~0,6 s po frejmu za 200×200 i 20 spp, što je otprilike isto na 1 i na 10 niti):
 
 | Komanda | Po frejmu | Ukupno |
 |---|---|---|
@@ -179,7 +179,7 @@ Savjeti:
 - **Manje frejmova skraćuje vrijeme:** `--frames 48 --fps 16` daje isti krug kamere za 2/3 vremena, ali je kretanje malo manje glatko.
 - **Dugi render bez prozora:** dodaj `--no-window`. Frejmovi se snimaju jedan po jedan, pa se prekidom ne gube već gotovi.
 
-**Napomena:** samo `animation` koristi više niti i zaseban generator slučajnih brojeva po niti (`RTW_MULTITHREADED` u `rtweekend.h`). `raytracer` je i dalje sekvencijalan i radi isto kao prije, pa mjerenja iz izvještaja ostaju uporediva.
+**Napomena:** samo `animation` može koristiti više niti (uz `--threads`) i ima zaseban generator slučajnih brojeva po niti (`RTW_MULTITHREADED` u `rtweekend.h`). `raytracer` je i dalje sekvencijalan i radi isto kao prije, pa mjerenja iz izvještaja ostaju uporediva.
 
 ## Odabir scene
 

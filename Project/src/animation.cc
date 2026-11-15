@@ -56,7 +56,7 @@ struct settings {
     int         spp       = 50;     // samples per pixel
     int         depth     = 8;      // max ray bounces
     int         fps       = 24;     // playback speed in the window
-    int         threads   = 0;      // 0 = all hardware threads
+    int         threads   = 1;      // render threads (1 = sequential); 0 = all hardware threads
     std::string out_dir   = "output/frames";
     bool        window    = true;   // false = render to PNG only (e.g. on a server)
 };
@@ -69,7 +69,7 @@ static void print_usage() {
         "  --spp S       samples per pixel (default 50)\n"
         "  --depth D     max ray depth (default 8)\n"
         "  --fps F       playback speed in the window (default 24)\n"
-        "  --threads T   render threads, 0 = all cores (default 0)\n"
+        "  --threads T   render threads, 0 = all cores (default 1)\n"
         "  --out DIR     folder for PNG frames (default output/frames)\n"
         "  --no-window   render frames to PNG without opening a window\n";
 }
