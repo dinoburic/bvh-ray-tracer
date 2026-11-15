@@ -9,10 +9,15 @@
 //
 // Everything runs on ONE thread, like raytracer: the window is serviced between rows of a pass.
 //
-// Usage:  interactive [--width W] [--depth D] [--max-spp N] [--out DIR] [--no-window]
+// Usage:  interactive [--width W] [--depth D] [--max-spp N] [--clamp C] [--out DIR] [--no-window]
 //
 // Controls:  mouse drag / arrow keys  orbit the camera     W / S or scroll  zoom in / out
 //            R  reset view             P  save PNG          ESC or Q  quit
+//
+// --clamp C limits the brightness of every single sample to C (firefly clamping). Rare, very
+// bright samples (e.g. a ray that scatters in the fog and then hits the small light) otherwise
+// show up as bright dots that take a very long time to average out. Clamping removes them at
+// the cost of a slightly darker image (some energy is lost). 0 = off, the exact image.
 //
 // With --no-window the program accumulates up to --max-spp at the starting view, prints how
 // long it took to reach 1, 10, 50, 100, 250, ... samples per pixel, saves a PNG and exits.
@@ -43,6 +48,7 @@ struct settings {
     int         width   = 400;    // image width = height (the scene is square)
     int         depth   = 10;     // max ray bounces
     int         max_spp = 1000;   // stop accumulating after this many samples per pixel
+    double      clamp   = 0;      // max brightness of one sample, 0 = no clamping
     std::string out_dir = "output";
     bool        window  = true;
 };
@@ -53,6 +59,8 @@ static void print_usage() {
         "  --width W     image width/height in pixels (default 400)\n"
         "  --depth D     max ray depth (default 10)\n"
         "  --max-spp N   stop accumulating at N samples per pixel (default 1000)\n"
+        "  --clamp C     limit the brightness of each sample to C, removes bright dots\n"
+        "                (fireflies) but darkens slightly; try 3 (default 0 = off)\n"
         "  --out DIR     folder for saved PNG images (default output)\n"
         "  --no-window   accumulate at the starting view, print timings, save PNG, exit\n";
 }
@@ -71,12 +79,13 @@ static bool parse_args(int argc, char** argv, settings& s) {
         else if (arg == "--depth")     ok = next_int(s.depth);
         else if (arg == "--max-spp")   ok = next_int(s.max_spp);
         else if (arg == "--no-window") s.window = false;
+        else if (arg == "--clamp" && a + 1 < argc) s.clamp = std::atof(argv[++a]);
         else if (arg == "--out" && a + 1 < argc) s.out_dir = argv[++a];
         else ok = false;
 
         if (!ok) return false;
     }
-    return s.width > 0 && s.depth > 0 && s.max_spp > 0;
+    return s.width > 0 && s.depth > 0 && s.max_spp > 0 && s.clamp >= 0;
 }
 
 
@@ -112,6 +121,20 @@ struct orbit_camera {
         radius = std::max(100.0, std::min(3000.0, radius * factor));
     }
 };
+
+
+//----------------------------------------------------------------------------------------------
+// Firefly clamping
+//----------------------------------------------------------------------------------------------
+
+// Scales a too-bright sample down so that its largest component is `limit`, keeping its hue.
+// limit = 0 means no clamping.
+static color clamp_sample(color c, double limit) {
+    double m = std::fmax(c.x(), std::fmax(c.y(), c.z()));
+    if (limit > 0 && m > limit)
+        c *= limit / m;
+    return c;
+}
 
 
 //----------------------------------------------------------------------------------------------
@@ -219,7 +242,9 @@ int main(int argc, char** argv) {
     }
 
     std::clog << width << "x" << height << ", depth " << s.depth << ", 1 thread, up to "
-              << s.max_spp << " spp\n";
+              << s.max_spp << " spp";
+    if (s.clamp > 0) std::clog << ", clamp " << s.clamp;
+    std::clog << "\n";
     if (s.window)
         std::clog << "Mouse drag / arrows: orbit   W/S or scroll: zoom   "
                      "R: reset   P: save PNG   ESC: quit\n";
@@ -228,8 +253,9 @@ int main(int argc, char** argv) {
     auto refresh_window = [&]() {
         bool done = samples >= s.max_spp;
         char title[160];
-        std::snprintf(title, sizeof(title), "Accumulated %d spp  (%.1f s)%s", samples,
-                      done ? done_seconds : seconds_since_reset(), done ? "  [done]" : "");
+        std::snprintf(title, sizeof(title), "Accumulated %d spp  (%.1f s)%s%s", samples,
+                      done ? done_seconds : seconds_since_reset(),
+                      s.clamp > 0 ? "  [clamp]" : "", done ? "  [done]" : "");
         view.set_title(title);
         view.show(rgb.data());
     };
@@ -268,7 +294,7 @@ int main(int argc, char** argv) {
             for (int j = 0; j < height; j++) {
                 for (int i = 0; i < width; i++) {
                     int idx = j * width + i;
-                    accum[idx] += cam.sample_pixel(i, j, world);
+                    accum[idx] += clamp_sample(cam.sample_pixel(i, j, world), s.clamp);
                     color_to_bytes(accum[idx] * inv, &rgb[idx * 3]);
                 }
 

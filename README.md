@@ -212,8 +212,20 @@ U naslovu prozora piše koliko je uzoraka akumulirano i koliko je vremena prošl
 | `--width W` | širina = visina slike | 400 |
 | `--depth D` | maksimalna dubina zrake | 10 |
 | `--max-spp N` | zaustavi akumulaciju na N uzoraka | 1000 |
+| `--clamp C` | ograniči svjetlinu svakog uzorka na C (vidi ispod) | 0 (isključeno) |
 | `--out DIR` | folder za snimljene slike | `output` |
 | `--no-window` | bez prozora: akumulira do `--max-spp` s početnog pogleda, ispiše vremena, snimi PNG i izađe | — |
+
+**Clamp (ograničavanje svijetlih uzoraka):** rijetki, vrlo svijetli uzorci (npr. zraka koja se rasprši u magli i zatim pogodi malo svjetlo) prave svijetle tačkice koje se dugo ne usrednje. `--clamp C` svaki uzorak čija je najveća komponenta boje veća od C proporcionalno umanji na C. Šum se smanji, ali se gubi dio svjetlosti, pa je slika tamnija. Mjerenje na 300×300 i 300 spp:
+
+| `--clamp` | šum u tamnoj pozadini | šum na podu | prosječna svjetlina |
+|---|---|---|---|
+| 0 (isključeno) | 24,0 | 14,8 | 68,3 |
+| 10 | 24,0 | 14,8 | 68,3 (nema efekta, svjetlo ima jačinu 7) |
+| 3 | 16,3 | 10,9 | 54,7 |
+| 1 | 9,7 | 6,3 | 37,8 |
+
+`--clamp 3` smanjuje šum za oko 30 %, ali je slika oko 20 % tamnija. Najveći dio šuma u ovoj sceni ne dolazi od pojedinačnih tačkica nego od malog broja uzoraka koji pogode svjetlo, pa ga clamp ne može ukloniti bez potamnjenja. Za to bi trebalo uzorkovanje svjetla (light sampling).
 
 Za mjerenje se koristi `--no-window`. Primjer s istim parametrima kao brza verzija scene 9 u `raytracer`-u:
 
