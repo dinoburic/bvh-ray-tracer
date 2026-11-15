@@ -51,6 +51,25 @@ class camera {
         std::clog << "\rDone.                 \n";
     }
 
+    // --- Hooks used by the animation (animation.cc) ---------------------------------------
+    // Prepares the camera after lookfrom/lookat/... were changed; must be called before
+    // sample_pixel(). render() calls this itself.
+    void prepare() { initialize(); }
+
+    // Image height in pixels, valid after prepare().
+    int height() const { return image_height; }
+
+    // Returns the averaged (linear, not gamma-corrected) color of pixel (i, j).
+    // Const and side-effect free on the camera, so it can be called from several threads.
+    color sample_pixel(int i, int j, const hittable& world) const {
+        color pixel_color(0,0,0);
+        for (int sample = 0; sample < samples_per_pixel; sample++) {
+            ray r = get_ray(i, j);
+            pixel_color += ray_color(r, max_depth, world);
+        }
+        return pixel_samples_scale * pixel_color;
+    }
+
   private:
     int    image_height;         // Rendered image height
     double pixel_samples_scale;  // Color scale factor for a sum of pixel samples

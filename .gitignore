@@ -454,3 +454,7 @@ cmake_install.cmake
 # OS
 Thumbs.db
 .DS_Store
+
+# Build output and rendered images/frames of this project
+Project/build/
+Project/output/
