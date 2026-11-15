@@ -103,15 +103,39 @@ Pored `raytracer`-a, build pravi i program `animation`, koji snima **finalnu sce
 
 **GLFW:** ako je instaliran na sistemu (npr. `brew install glfw`), CMake ga koristi; ako nije, CMake ga sam preuzme i izgradi pri prvom `cmake -B ...` (potreban je internet). Animacija se može isključiti sa `-DBUILD_ANIMATION=OFF`.
 
-Pokretanje (iz foldera `Project/`, da bi se našla tekstura `images/earthmap.jpg`):
+### Pokretanje animacije, korak po korak
+
+**1. Prebaci se na branch s animacijom** (ako već nisi):
+
+```
+git checkout feature/glfw-animation
+```
+
+**2. Izgradi program** (iz foldera `Project/`). Prvi `cmake -B ...` preuzima GLFW, pa treba internet. Poslije izmjene koda dovoljna je samo druga komanda.
 
 ```
 # Linux / macOS
-./build/Release/animation
+cmake -B build/Release -DCMAKE_BUILD_TYPE=Release
+cmake --build build/Release
 
 # Windows
+cmake -B build
+cmake --build build --config Release
+```
+
+**3. Pokreni animaciju**, takođe iz foldera `Project/` (inače se ne nađe tekstura `images/earthmap.jpg`):
+
+```
+# Linux / macOS
+./build/Release/animation --frames 36 --width 200 --spp 20   # brzi pregled (~pola minute)
+./build/Release/animation                                    # 72 frejma, 400x400, 50 spp
+
+# Windows
+build\Release\animation.exe --frames 36 --width 200 --spp 20
 build\Release\animation.exe
 ```
+
+Otvori se prozor u kojem se frejmovi iscrtavaju jedan po jedan. Kad su svi gotovi, animacija se sama pušta u petlji. Frejmovi ostaju snimljeni u `Project/output/frames/`.
 
 Opcije:
 
@@ -126,8 +150,6 @@ Opcije:
 | `--out DIR` | folder za PNG frejmove | `output/frames` |
 | `--no-window` | samo renderuje PNG frejmove, bez prozora | — |
 
-Primjer brzog pregleda: `./build/Release/animation --frames 36 --width 200 --spp 20`
-
 Tasteri u prozoru tokom reprodukcije: `SPACE` pauza, `←`/`→` frejm nazad/naprijed, `↑`/`↓` brže/sporije, `ESC` ili `Q` izlaz. Zatvaranje prozora tokom renderovanja prekida rad (već snimljeni frejmovi ostaju).
 
 Od frejmova se može napraviti video pomoću [ffmpeg](https://ffmpeg.org/):
@@ -135,6 +157,33 @@ Od frejmova se može napraviti video pomoću [ffmpeg](https://ffmpeg.org/):
 ```
 ffmpeg -framerate 24 -i output/frames/frame_%04d.png -c:v libx264 -pix_fmt yuv420p output/animation.mp4
 ```
+
+### Kvalitet animacije
+
+Šum (zrnca na slici) dolazi od premalo uzoraka po pikselu. Finalna scena ima samo jedno malo svjetlo, pa većina zraka ne pogodi svjetlo i slika je zrnasta.
+
+| Opcija | Šta radi | Uticaj na vrijeme |
+|---|---|---|
+| `--spp` | **najvažnija**: više uzoraka po pikselu daje manje šuma | linearno (2× spp = 2× vrijeme) |
+| `--width` | veća rezolucija, oštrija slika | kvadratno (2× širina = 4× vrijeme) |
+| `--depth` | više odbijanja, svjetlije staklo i sjene | malo |
+
+Šum opada sa korijenom iz spp: 4× više uzoraka daje upola manje šuma.
+
+Procjena trajanja za 72 frejma (Apple M5, sva jezgra; preračunato iz probnog rendera od ~0,6 s po frejmu za 200×200 i 20 spp):
+
+| Komanda | Po frejmu | Ukupno |
+|---|---|---|
+| `--width 400 --spp 50` (podrazumijevano) | ~6 s | ~7 min |
+| `--width 400 --spp 200 --depth 10` | ~25 s | ~30 min |
+| `--width 400 --spp 500 --depth 10` | ~1 min | ~1,2 h |
+| `--width 600 --spp 500 --depth 10` | ~2,3 min | ~2,7 h |
+
+Savjeti:
+
+- **Probaj kvalitet na jednom frejmu** prije dugog rendera: `--frames 1` snimi samo `frame_0000.png`.
+- **Manje frejmova skraćuje vrijeme:** `--frames 48 --fps 16` daje isti krug kamere za 2/3 vremena, ali je kretanje malo manje glatko.
+- **Dugi render bez prozora:** dodaj `--no-window`. Frejmovi se snimaju jedan po jedan, pa se prekidom ne gube već gotovi.
 
 **Napomena:** samo `animation` koristi više niti i zaseban generator slučajnih brojeva po niti (`RTW_MULTITHREADED` u `rtweekend.h`). `raytracer` je i dalje sekvencijalan i radi isto kao prije, pa mjerenja iz izvještaja ostaju uporediva.
 
