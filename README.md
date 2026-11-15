@@ -105,13 +105,7 @@ Pored `raytracer`-a, build pravi i program `animation`, koji snima **finalnu sce
 
 ### Pokretanje animacije, korak po korak
 
-**1. Prebaci se na branch s animacijom** (ako već nisi):
-
-```
-git checkout feature/glfw-animation
-```
-
-**2. Izgradi program** (iz foldera `Project/`). Prvi `cmake -B ...` preuzima GLFW, pa treba internet. Poslije izmjene koda dovoljna je samo druga komanda.
+**1. Izgradi program** (iz foldera `Project/`). Prvi `cmake -B ...` preuzima GLFW, pa treba internet. Poslije izmjene koda dovoljna je samo druga komanda.
 
 ```
 # Linux / macOS
@@ -123,7 +117,7 @@ cmake -B build
 cmake --build build --config Release
 ```
 
-**3. Pokreni animaciju**, takođe iz foldera `Project/` (inače se ne nađe tekstura `images/earthmap.jpg`):
+**2. Pokreni animaciju**, takođe iz foldera `Project/` (inače se ne nađe tekstura `images/earthmap.jpg`):
 
 ```
 # Linux / macOS
