@@ -55,6 +55,9 @@ if(BUILD_ANIMATION)
     if(NOT glfw3_FOUND)
         message(STATUS "GLFW not found on the system, downloading GLFW 3.4")
         include(FetchContent)
+        if(POLICY CMP0135)
+            cmake_policy(SET CMP0135 NEW)   # timestamps of downloaded files = extraction time
+        endif()
         set(GLFW_BUILD_DOCS     OFF CACHE BOOL "" FORCE)
         set(GLFW_BUILD_TESTS    OFF CACHE BOOL "" FORCE)
         set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
@@ -67,6 +70,7 @@ if(BUILD_ANIMATION)
 
     add_executable(animation
         src/animation.cc
+        src/gl_display.h
         src/scenes.h
         src/camera.h
         src/color.h
@@ -76,4 +80,17 @@ if(BUILD_ANIMATION)
     # Thread-safe random numbers (see rtweekend.h)
     target_compile_definitions(animation PRIVATE RTW_MULTITHREADED)
     target_link_libraries(animation PRIVATE glfw OpenGL::GL Threads::Threads)
+
+    # Interactive viewer with temporal (progressive) accumulation. Sequential (one thread),
+    # uses std::rand() like raytracer, so it is NOT built with RTW_MULTITHREADED.
+    add_executable(interactive
+        src/interactive.cc
+        src/gl_display.h
+        src/scenes.h
+        src/camera.h
+        src/color.h
+        src/rtweekend.h
+        src/external/stb_image_write.h
+    )
+    target_link_libraries(interactive PRIVATE glfw OpenGL::GL)
 endif()

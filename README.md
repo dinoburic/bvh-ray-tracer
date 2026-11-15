@@ -39,7 +39,7 @@ Path tracer u C++-u, rađen prema knjizi *Ray Tracing: The Next Week* (Peter Shi
 ```
 Project/
 ├── CMakeLists.txt
-├── src/              <- main.cc, animation.cc i svi .h fajlovi (scenes.h: finalna scena)
+├── src/              <- main.cc, animation.cc, interactive.cc i .h fajlovi (scenes.h: finalna scena, gl_display.h: GLFW prozor)
 │   └── external/     <- stb_image.h
 ├── images/           <- earthmap.jpg (tekstura)
 └── output/           <- renderovane slike
@@ -180,6 +180,48 @@ Savjeti:
 - **Dugi render bez prozora:** dodaj `--no-window`. Frejmovi se snimaju jedan po jedan, pa se prekidom ne gube već gotovi.
 
 **Napomena:** samo `animation` može koristiti više niti (uz `--threads`) i ima zaseban generator slučajnih brojeva po niti (`RTW_MULTITHREADED` u `rtweekend.h`). `raytracer` je i dalje sekvencijalan i radi isto kao prije, pa mjerenja iz izvještaja ostaju uporediva.
+
+## Interaktivni pregled s vremenskom akumulacijom (GLFW)
+
+Program `interactive` prikazuje finalnu scenu u prozoru u kojem se kamera pomjera mišem ili tastaturom. Koristi **vremensku (progresivnu) akumulaciju** (temporal accumulation): svaki prolaz renderuje samo **1 uzorak po pikselu** i dodaje ga u bafer. Prozor prikazuje prosjek svih dosadašnjih prolaza, pa se slika pojavi nakon prvog prolaza i postepeno postaje čistija (šum opada kao 1/√N). Kad se kamera pomjeri, stari uzorci više ne odgovaraju pikselima, pa se bafer briše i akumulacija kreće ispočetka.
+
+Program je **sekvencijalan**: sve radi na jednoj niti, kao `raytracer`, i koristi isti generator slučajnih brojeva (`std::rand()`), pa je scena ista kao na slikama iz izvještaja. Prozor se osvježava između redova slike, pa reaguje i dok traje prolaz.
+
+Build je isti kao za animaciju (`cmake --build build/Release`). Pokretanje iz foldera `Project/`:
+
+```
+# Linux / macOS
+./build/Release/interactive
+
+# Windows
+build\Release\interactive.exe
+```
+
+| Kontrola | Akcija |
+|---|---|
+| prevlačenje mišem / strelice | kamera kruži oko scene |
+| `W` / `S` ili scroll | primicanje / udaljavanje |
+| `R` | povratak na početni pogled |
+| `P` | snimi trenutnu sliku u `output/accumulated_<spp>spp_XX.png` |
+| `ESC` ili `Q` | izlaz |
+
+U naslovu prozora piše koliko je uzoraka akumulirano i koliko je vremena prošlo od zadnjeg pomjeranja kamere. Kad se dostigne `--max-spp`, renderovanje stane i program čeka sljedeći pokret.
+
+| Opcija | Značenje | Podrazumijevano |
+|---|---|---|
+| `--width W` | širina = visina slike | 400 |
+| `--depth D` | maksimalna dubina zrake | 10 |
+| `--max-spp N` | zaustavi akumulaciju na N uzoraka | 1000 |
+| `--out DIR` | folder za snimljene slike | `output` |
+| `--no-window` | bez prozora: akumulira do `--max-spp` s početnog pogleda, ispiše vremena, snimi PNG i izađe | — |
+
+Za mjerenje se koristi `--no-window`. Primjer s istim parametrima kao brza verzija scene 9 u `raytracer`-u:
+
+```
+./build/Release/interactive --no-window --width 400 --depth 4 --max-spp 250
+```
+
+Na Apple M5 prva slika (1 spp) se pojavi za oko 0,12 s, 50 spp nakon oko 5 s, a 250 spp nakon oko 24,8 s. `raytracer` za istu sliku treba oko 21,5 s, ali prvu sliku daje tek na kraju. Akumulacija je ukupno nešto sporija jer se nakon svakog prolaza ponovo računa prikazana slika (prosjek i gama korekcija za svaki piksel).
 
 ## Odabir scene
 
