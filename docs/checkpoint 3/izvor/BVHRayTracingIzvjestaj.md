@@ -25,7 +25,8 @@ abstract: |
   akumulacijom (temporal accumulation) i ograničavanjem svijetlih uzoraka (clamp).
   Akumulacija daje sliku odmah, ali ne čisti sliku brže od klasičnog renderovanja.
   Na kraju smo iz finalne scene izbacili veliku sferu magle, koja je pravila
-  najveći dio šuma u pozadini, čime je renderovanje postalo oko 36 % brže.
+  najveći dio šuma u pozadini, čime je renderovanje postalo oko 36 % brže, i
+  podigli podrazumijevani kvalitet slike na 1000 uzoraka po pikselu i dubinu 20.
 
 references:
   - "Shirley, P., Black, T. D., Hollasch, S. Ray Tracing: The Next Week. raytracing.github.io/books/RayTracingTheNextWeek.html."
@@ -235,6 +236,29 @@ je ostala. Nakon izmjene `raytracer` za brzu verziju finalne scene treba 13,7 s
 umjesto 21,4 s, a `interactive` dostiže 250 uzoraka za 16,2 s umjesto 24,8 s. Ovo
 je odstupanje od scene iz knjige, pa su mjerenja iz Checkpointa 2 i sekcija 3 i 4
 rađena na sceni s maglom i nisu direktno uporediva s novim.
+
+# Podrazumijevani kvalitet slike
+
+Na kraju smo u sva tri programa podigli podrazumijevani broj uzoraka po pikselu na
+1000 i maksimalnu dubinu zrake na 20 (tabela 7), da bi slika bez dodatnih opcija
+bila čistija.
+
+| Program | Prije | Sada |
+|---------|-------|------|
+| `raytracer` | 250 uzoraka, dubina 4 | 1000 uzoraka, dubina 20 |
+| `animation` | 50 uzoraka, dubina 8 | 1000 uzoraka, dubina 20 |
+| `interactive` | do 1000 uzoraka, dubina 10 | do 1000 uzoraka, dubina 20 |
+
+: Podrazumijevani broj uzoraka po pikselu i dubina zrake.
+
+Na sceni bez magle `raytracer` s novim postavkama treba 110 s na Apple M5, umjesto
+13,7 s. Rezultat je na slici 5. Šum je vidno manji nego na slikama iz sekcija 4 i 5,
+ali se renderovanje produžilo oko osam puta. Animacija od 72 frejma s ovim postavkama
+trajala bi oko 2,2 sata, pa ćemo je renderovati tek nakon paralelizacije. Mjerenja u
+ovom izvještaju i dalje su rađena s brzom verzijom (250 uzoraka, dubina 4), jer je
+ona dovoljna za poređenje vremena.
+
+![Finalna scena bez magle, 1000 uzoraka po pikselu i dubina 20 (110 s na Apple M5).](render_1000spp_dubina20.png){width=9cm}
 
 # Naredni koraci
 
