@@ -20,7 +20,10 @@ abstract: |
   pronaći metode koje troše najviše vremena prije nego što počnemo s paralelizacijom.
   Na Apple M5 skoro sve vrijeme odlazi na renderovanje, a izgradnja BVH stabla traje
   svega 16 ms. Najskuplja metoda je test presjeka zrake s kutijom BVH čvora
-  (`aabb::hit`), s oko 25 % vremena.
+  (`aabb::hit`), s oko 25 % vremena, a ukupno oko 60 % vremena odlazi na traženje
+  presjeka zrake sa scenom. Dodali smo i interaktivni pregled s vremenskom
+  akumulacijom (temporal accumulation) i ograničavanjem svijetlih uzoraka (clamp).
+  Akumulacija daje sliku odmah, ali ne čisti sliku brže od klasičnog renderovanja.
 
 references:
   - "Shirley, P., Black, T. D., Hollasch, S. Ray Tracing: The Next Week. raytracing.github.io/books/RayTracingTheNextWeek.html."
@@ -34,10 +37,12 @@ references:
 
 U Checkpointu 2 smo pripremili sekvencijalnu implementaciju ray tracera s BVH
 strukturom, zasnovanu na knjizi *Ray Tracing: The Next Week* [1]. U ovoj fazi smo
-uradili dvije stvari. Prvo, dodali smo biblioteku GLFW [2] i napravili animaciju
+uradili tri stvari. Prvo, dodali smo biblioteku GLFW [2] i napravili animaciju
 finalne scene. Drugo, sekvencijalnu verziju smo pustili kroz profiler na dva
-različita računara, da vidimo koje metode najviše troše vremena. Te rezultate ćemo
-koristiti u narednoj fazi, kada budemo paralelizovali renderovanje.
+različita računara, da vidimo koje metode najviše troše vremena. Treće, napravili
+smo interaktivni pregled scene s vremenskom akumulacijom i probali da li se njome
+može brže dobiti čista slika. Rezultate profilisanja ćemo koristiti u narednoj fazi,
+kada budemo paralelizovali renderovanje.
 
 # Biblioteka GLFW i animacija
 
@@ -110,12 +115,30 @@ slici 1.
 
 ![Profil sekvencijalne izvedbe u alatu Instruments (Apple M5), sortiran po vlastitom vremenu metoda.](profil_apple_m5.png){width=15.9cm}
 
-Obilazak BVH-a (`aabb::hit`, `bvh_node::hit` i većina `vec3::operator[]`) zajedno
-uzima oko 35 % vremena. To smo i očekivali, jer BVH zamjenjuje skupe testove s
-objektima velikim brojem jeftinih testova s kutijama. Iznenadilo nas je da
-`get_sphere_uv` uzima 15 %. UV koordinate se računaju pri svakom pogotku sfere, iako
-su potrebne samo sferama s teksturom. Vidi se i oko 4–5 % vremena na kopiranju
-pokazivača `shared_ptr` na materijal pri svakom pogotku.
+Kada metode grupišemo po namjeni (tabela 3), vidi se da najviše vremena uzima
+traženje presjeka zrake sa scenom. Skoro sve metode na vrhu liste su `hit` metode,
+a najčešći put kroz program u profilu je `main` → `hittable_list::hit` →
+`bvh_node::hit` → `aabb::hit`.
+
+| Grupa | Metode | Udio |
+|-------|--------|-----:|
+| obilazak BVH stabla | `aabb::hit`, `bvh_node::hit`, `vec3::operator[]` | ~35 % |
+| presjeci s objektima | `constant_medium::hit`, `quad::hit`, `sphere::hit`, `hittable_list::hit`, `quad::is_interior` | ~26 % |
+| UV koordinate sfere | `sphere::get_sphere_uv` | ~15 % |
+| slučajni brojevi | `random_double`, `random_unit_vector`, `rand` | ~7 % |
+| `shared_ptr` na materijal | kopiranje i brisanje `shared_ptr<material>` | ~4–5 % |
+
+: Udio vremena po grupama metoda na Apple M5.
+
+Obilazak BVH-a uzima oko 35 % vremena. To smo i očekivali, jer BVH zamjenjuje skupe
+testove s objektima velikim brojem jeftinih testova s kutijama, pa je `aabb::hit`
+najskuplja pojedinačna metoda. Iznenadilo nas je da `get_sphere_uv` uzima 15 %. UV
+koordinate se računaju pri svakom pogotku sfere, iako su potrebne samo sferama s
+teksturom.
+
+S druge strane, materijali i kamera su skoro zanemarivi. `camera::ray_color` sam troši
+samo 0,9 %, a metode `scatter` materijala nisu ni među prvih 30. Dakle, gotovo sav
+posao je u geometriji, odnosno u `hit` metodama, a ne u računanju boje.
 
 ## AMD Ryzen AI 9 HX 370
 
@@ -139,6 +162,49 @@ velika, ali dio nje otpada na sam profiler i na drugačiji kompajler i build na
 Windowsu, pa ovo ne smatramo tačnim poređenjem brzine procesora. Tačnije poređenje
 ćemo uraditi u narednoj fazi, mjerenjem bez profilera.
 
+# Vremenska akumulacija
+
+Napravili smo i program `interactive`, u kojem se kamera oko finalne scene pomjera
+mišem i tastaturom. Koristi vremensku (progresivnu) akumulaciju (temporal
+accumulation): svaki prolaz renderuje samo jedan uzorak po pikselu i dodaje ga u
+bafer, a prozor prikazuje prosjek svih dosadašnjih prolaza. Kad se kamera pomjeri,
+bafer se briše i akumulacija kreće ispočetka. I ovaj program radi sekvencijalno, na
+jednoj niti, i koristi isti generator slučajnih brojeva kao `raytracer`. Tabela 4
+poredi vremena za istu sliku kao u tabeli 1.
+
+| Program | 1 uzorak | 50 uzoraka | 250 uzoraka |
+|---------|---------:|-----------:|------------:|
+| `interactive` (akumulacija) | 0,12 s | 4,9 s | 24,8 s |
+| `raytracer` | — | — | ~21,5 s |
+
+: Vrijeme do datog broja uzoraka po pikselu (Apple M5, 400 × 400, dubina 4).
+
+Prednost je što se slika vidi odmah, a ne tek nakon 21 s. Akumulacija je ukupno
+oko 15 % sporija, jer se nakon svakog prolaza ponovo računa prikazana slika. Međutim,
+čistoću slike nije poboljšala. Slika sa N prolaza po jedan uzorak je ista kao slika
+sa N uzoraka odjednom, pa šum zavisi samo od broja uzoraka. I nakon 910 uzoraka
+(oko 2,5 min) slika je bila vidno zrnasta, posebno u tamnoj pozadini i u sjenama.
+Ova scena ima samo jedno malo svjetlo, pa ga pogodi malo zraka.
+
+Zato smo dodali i opciju `--clamp`, koja ograničava svjetlinu svakog pojedinačnog
+uzorka. Ideja je bila da zrnca prave rijetki, vrlo svijetli uzorci, npr. zraka koja
+se rasprši u magli i zatim pogodi svjetlo. Rezultati su u tabeli 5 i na slici 3.
+
+| Clamp | Šum u pozadini | Šum na podu | Prosječna svjetlina |
+|-------|---------------:|------------:|--------------------:|
+| bez clampa | 24,0 | 14,8 | 68,3 |
+| 3 | 16,3 | 10,9 | 54,7 |
+| 1 | 9,7 | 6,3 | 37,8 |
+
+: Uticaj clampa na šum i svjetlinu slike (300 × 300, 300 uzoraka po pikselu). Šum je prosječna razlika susjednih piksela.
+
+![Ista slika bez clampa (lijevo), s clampom 3 (sredina) i s clampom 1 (desno), 300 uzoraka po pikselu.](clamp_poredjenje.png){width=15.9cm}
+
+Clamp 3 smanjuje šum za oko 30 %, ali je slika oko 20 % tamnija, jer se odsječeni
+dio svjetlosti gubi. Pokazalo se da većina šuma ne dolazi od pojedinačnih svijetlih
+uzoraka, nego od toga što premalo uzoraka uopšte pogodi svjetlo. Zato clamp ostaje
+samo pomoćna opcija, a po defaultu je isključen.
+
 # Naredni koraci
 
 - Paralelizacija renderovanja po redovima slike. Pikseli su međusobno nezavisni, pa
@@ -150,3 +216,5 @@ Windowsu, pa ovo ne smatramo tačnim poređenjem brzine procesora. Tačnije pore
 - Ponovno profilisanje na AMD računaru s debug simbolima, da bi se vidjela imena
   metoda.
 - Mjerenje ubrzanja paralelne verzije za različit broj niti na oba računara.
+- Uzorkovanje svjetla (light sampling), da bi se dobila čistija slika s istim brojem
+  uzoraka.
