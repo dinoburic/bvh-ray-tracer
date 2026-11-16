@@ -22,8 +22,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "external/stb_image_write.h"
 
-#define GL_SILENCE_DEPRECATION
-#include <GLFW/glfw3.h>
+#include "gl_display.h"
 
 #include <algorithm>
 #include <atomic>
@@ -34,16 +33,6 @@
 #include <string>
 #include <thread>
 #include <vector>
-
-#ifdef _WIN32
-#include <direct.h>
-#else
-#include <sys/stat.h>
-#endif
-
-#ifndef GL_CLAMP_TO_EDGE
-#define GL_CLAMP_TO_EDGE 0x812F   // missing from the OpenGL 1.1 header on Windows
-#endif
 
 
 //----------------------------------------------------------------------------------------------
@@ -97,20 +86,6 @@ static bool parse_args(int argc, char** argv, settings& s) {
         if (!ok) return false;
     }
     return s.frames > 0 && s.width > 0 && s.spp > 0 && s.depth > 0 && s.fps > 0;
-}
-
-static void make_dirs(const std::string& path) {
-    // Creates every folder along the path (like "mkdir -p").
-    for (size_t i = 1; i <= path.size(); i++) {
-        if (i == path.size() || path[i] == '/' || path[i] == '\\') {
-            std::string part = path.substr(0, i);
-#ifdef _WIN32
-            _mkdir(part.c_str());
-#else
-            mkdir(part.c_str(), 0755);
-#endif
-        }
-    }
 }
 
 
@@ -178,118 +153,6 @@ static void render_worker(frame_job& job) {
 
 
 //----------------------------------------------------------------------------------------------
-// GLFW / OpenGL display (legacy fixed-function GL, enough to draw one textured quad)
-//----------------------------------------------------------------------------------------------
-
-struct viewer {
-    GLFWwindow* window  = nullptr;
-    GLuint      texture = 0;
-    int         img_w = 0, img_h = 0;
-
-    // playback controls (changed from the key callback)
-    bool paused = false;
-    int  step   = 0;   // -1 / +1 when an arrow key was pressed
-    int  fps    = 24;
-
-    bool open(int w, int h, int fps_) {
-        img_w = w; img_h = h; fps = fps_;
-        if (!glfwInit()) {
-            std::cerr << "ERROR: glfwInit failed.\n";
-            return false;
-        }
-
-        // Show small frames bigger so they are comfortable to watch.
-        int scale = std::max(1, 640 / std::max(w, h));
-        window = glfwCreateWindow(w * scale, h * scale, "BVH Ray Tracer - animation", nullptr, nullptr);
-        if (!window) {
-            std::cerr << "ERROR: could not create GLFW window.\n";
-            glfwTerminate();
-            return false;
-        }
-        glfwMakeContextCurrent(window);
-        glfwSwapInterval(1);
-        glfwSetWindowUserPointer(window, this);
-        glfwSetKeyCallback(window, key_callback);
-
-        glGenTextures(1, &texture);
-        glBindTexture(GL_TEXTURE_2D, texture);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
-        return true;
-    }
-
-    void close() {
-        if (!window) return;
-        glDeleteTextures(1, &texture);
-        glfwDestroyWindow(window);
-        glfwTerminate();
-        window = nullptr;
-    }
-
-    bool should_close() const { return glfwWindowShouldClose(window) != 0; }
-
-    void set_title(const std::string& title) {
-        if (title == last_title) return;   // avoid needless window-system calls every frame
-        last_title = title;
-        glfwSetWindowTitle(window, title.c_str());
-    }
-    std::string last_title;
-
-    // Uploads an RGB image (top row first) and draws it, keeping the aspect ratio.
-    void show(const unsigned char* rgb) {
-        int fb_w, fb_h;
-        glfwGetFramebufferSize(window, &fb_w, &fb_h);   // differs from window size on Retina
-
-        glViewport(0, 0, fb_w, fb_h);
-        glClearColor(0.08f, 0.08f, 0.08f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-
-        glBindTexture(GL_TEXTURE_2D, texture);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, img_w, img_h, GL_RGB, GL_UNSIGNED_BYTE, rgb);
-
-        // Fit the image into the window (letterbox).
-        double sx = 1.0, sy = 1.0;
-        double win_aspect = double(fb_w) / std::max(fb_h, 1);
-        double img_aspect = double(img_w) / img_h;
-        if (win_aspect > img_aspect) sx = img_aspect / win_aspect;
-        else                         sy = win_aspect / img_aspect;
-
-        glMatrixMode(GL_PROJECTION); glLoadIdentity();
-        glMatrixMode(GL_MODELVIEW);  glLoadIdentity();
-        glEnable(GL_TEXTURE_2D);
-        glColor3f(1, 1, 1);
-        glBegin(GL_QUADS);   // texture row 0 is the top image row, so v is flipped
-            glTexCoord2f(0, 1); glVertex2d(-sx, -sy);
-            glTexCoord2f(1, 1); glVertex2d( sx, -sy);
-            glTexCoord2f(1, 0); glVertex2d( sx,  sy);
-            glTexCoord2f(0, 0); glVertex2d(-sx,  sy);
-        glEnd();
-        glDisable(GL_TEXTURE_2D);
-
-        glfwSwapBuffers(window);
-    }
-
-    static void key_callback(GLFWwindow* w, int key, int, int action, int) {
-        if (action != GLFW_PRESS && action != GLFW_REPEAT) return;
-        auto* v = static_cast<viewer*>(glfwGetWindowUserPointer(w));
-        switch (key) {
-            case GLFW_KEY_ESCAPE:
-            case GLFW_KEY_Q:     glfwSetWindowShouldClose(w, GLFW_TRUE); break;
-            case GLFW_KEY_SPACE: v->paused = !v->paused;                 break;
-            case GLFW_KEY_RIGHT: v->step = +1;                           break;
-            case GLFW_KEY_LEFT:  v->step = -1;                           break;
-            case GLFW_KEY_UP:    v->fps = std::min(v->fps + 4, 120);     break;
-            case GLFW_KEY_DOWN:  v->fps = std::max(v->fps - 4, 1);       break;
-        }
-    }
-};
-
-
-//----------------------------------------------------------------------------------------------
 // Main
 //----------------------------------------------------------------------------------------------
 
@@ -320,8 +183,24 @@ int main(int argc, char** argv) {
     const int width  = s.width;
     const int height = cam.height();
 
-    viewer view;
-    if (s.window && !view.open(width, height, s.fps)) {
+    // Playback controls, changed from the key callback.
+    bool paused = false;
+    int  step   = 0;        // -1 / +1 when an arrow key was pressed
+    int  fps    = s.fps;
+
+    gl_display view;
+    view.on_key = [&](int key) {
+        switch (key) {
+            case GLFW_KEY_ESCAPE:
+            case GLFW_KEY_Q:     view.request_close();          break;
+            case GLFW_KEY_SPACE: paused = !paused;              break;
+            case GLFW_KEY_RIGHT: step = +1;                     break;
+            case GLFW_KEY_LEFT:  step = -1;                     break;
+            case GLFW_KEY_UP:    fps = std::min(fps + 4, 120);  break;
+            case GLFW_KEY_DOWN:  fps = std::max(fps - 4, 1);    break;
+        }
+    };
+    if (s.window && !view.open(width, height, "BVH Ray Tracer - animation")) {
         std::clog << "Continuing without a window.\n";
         s.window = false;
     }
@@ -407,19 +286,19 @@ int main(int argc, char** argv) {
         glfwWaitEventsTimeout(0.005);
 
         double now = glfwGetTime();
-        if (view.step != 0) {
-            current = (current + view.step + int(frames.size())) % int(frames.size());
-            view.step = 0;
-            view.paused = true;
+        if (step != 0) {
+            current = (current + step + int(frames.size())) % int(frames.size());
+            step = 0;
+            paused = true;
             last_switch = now;
-        } else if (!view.paused && now - last_switch >= 1.0 / view.fps) {
+        } else if (!paused && now - last_switch >= 1.0 / fps) {
             current = (current + 1) % int(frames.size());
             last_switch = now;
         }
 
         view.set_title("Animation  frame " + std::to_string(current + 1) + "/" +
-                       std::to_string(frames.size()) + "  " + std::to_string(view.fps) + " fps" +
-                       (view.paused ? "  [paused]" : ""));
+                       std::to_string(frames.size()) + "  " + std::to_string(fps) + " fps" +
+                       (paused ? "  [paused]" : ""));
         view.show(frames[current].data());
     }
 
