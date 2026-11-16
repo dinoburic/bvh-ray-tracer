@@ -23,7 +23,7 @@ Path tracer u C++-u, rađen prema knjizi *Ray Tracing: The Next Week* (Peter Shi
 - Sfere (uključujući pokretne)
 - Četverougao (`quad`) i kutije (`box`)
 - Instance: `translate` i `rotate_y`
-- Volumeni konstantne gustoće (`constant_medium`): dim i magla
+- Volumeni konstantne gustoće (`constant_medium`): dim i magla (u finalnoj sceni plava staklena sfera s maglom unutra; velika sfera magle oko cijele scene iz knjige je izbačena, vidi izvještaj za Checkpoint 3)
 
 **Ubrzanje**
 - `aabb` (axis-aligned bounding box, slab metoda)
@@ -122,7 +122,7 @@ cmake --build build --config Release
 ```
 # Linux / macOS
 ./build/Release/animation --frames 36 --width 200 --spp 20   # brzi pregled (~pola minute)
-./build/Release/animation                                    # 72 frejma, 400x400, 50 spp
+./build/Release/animation                                    # 72 frejma, 400x400, 1000 spp, dubina 20 (~2 h)
 
 # Windows
 build\Release\animation.exe --frames 36 --width 200 --spp 20
@@ -137,8 +137,8 @@ Opcije:
 |---|---|---|
 | `--frames N` | broj frejmova za jedan krug kamere | 72 |
 | `--width W` | širina = visina frejma u pikselima | 400 |
-| `--spp S` | uzorci po pikselu | 50 |
-| `--depth D` | maksimalna dubina zrake | 8 |
+| `--spp S` | uzorci po pikselu | 1000 |
+| `--depth D` | maksimalna dubina zrake | 20 |
 | `--fps F` | brzina reprodukcije u prozoru | 24 |
 | `--threads T` | broj niti (0 = sva jezgra) | 1 |
 | `--out DIR` | folder za PNG frejmove | `output/frames` |
@@ -164,14 +164,14 @@ ffmpeg -framerate 24 -i output/frames/frame_%04d.png -c:v libx264 -pix_fmt yuv42
 
 Šum opada sa korijenom iz spp: 4× više uzoraka daje upola manje šuma.
 
-Procjena trajanja za 72 frejma (Apple M5; preračunato iz probnog rendera od ~0,6 s po frejmu za 200×200 i 20 spp, što je otprilike isto na 1 i na 10 niti):
+Procjena trajanja za 72 frejma (Apple M5, 1 nit, scena bez velike sfere magle; preračunato iz izmjerenih ~110 s za jednu sliku 400×400 sa 1000 spp i dubinom 20):
 
 | Komanda | Po frejmu | Ukupno |
 |---|---|---|
-| `--width 400 --spp 50` (podrazumijevano) | ~6 s | ~7 min |
-| `--width 400 --spp 200 --depth 10` | ~25 s | ~30 min |
-| `--width 400 --spp 500 --depth 10` | ~1 min | ~1,2 h |
-| `--width 600 --spp 500 --depth 10` | ~2,3 min | ~2,7 h |
+| `--width 200 --spp 50` | ~1,4 s | ~2 min |
+| `--width 400 --spp 50` | ~5,5 s | ~7 min |
+| `--width 400 --spp 250` | ~28 s | ~33 min |
+| podrazumijevano (`--width 400 --spp 1000 --depth 20`) | ~110 s | ~2,2 h |
 
 Savjeti:
 
@@ -210,13 +210,13 @@ U naslovu prozora piše koliko je uzoraka akumulirano i koliko je vremena prošl
 | Opcija | Značenje | Podrazumijevano |
 |---|---|---|
 | `--width W` | širina = visina slike | 400 |
-| `--depth D` | maksimalna dubina zrake | 10 |
+| `--depth D` | maksimalna dubina zrake | 20 |
 | `--max-spp N` | zaustavi akumulaciju na N uzoraka | 1000 |
 | `--clamp C` | ograniči svjetlinu svakog uzorka na C (vidi ispod) | 0 (isključeno) |
 | `--out DIR` | folder za snimljene slike | `output` |
 | `--no-window` | bez prozora: akumulira do `--max-spp` s početnog pogleda, ispiše vremena, snimi PNG i izađe | — |
 
-**Clamp (ograničavanje svijetlih uzoraka):** rijetki, vrlo svijetli uzorci (npr. zraka koja se rasprši u magli i zatim pogodi malo svjetlo) prave svijetle tačkice koje se dugo ne usrednje. `--clamp C` svaki uzorak čija je najveća komponenta boje veća od C proporcionalno umanji na C. Šum se smanji, ali se gubi dio svjetlosti, pa je slika tamnija. Mjerenje na 300×300 i 300 spp:
+**Clamp (ograničavanje svijetlih uzoraka):** rijetki, vrlo svijetli uzorci (npr. zraka koja se rasprši u magli i zatim pogodi malo svjetlo) prave svijetle tačkice koje se dugo ne usrednje. `--clamp C` svaki uzorak čija je najveća komponenta boje veća od C proporcionalno umanji na C. Šum se smanji, ali se gubi dio svjetlosti, pa je slika tamnija. Mjerenje na 300×300 i 300 spp (urađeno dok je scena još imala veliku sferu magle):
 
 | `--clamp` | šum u tamnoj pozadini | šum na podu | prosječna svjetlina |
 |---|---|---|---|
@@ -233,7 +233,7 @@ Za mjerenje se koristi `--no-window`. Primjer s istim parametrima kao brza verzi
 ./build/Release/interactive --no-window --width 400 --depth 4 --max-spp 250
 ```
 
-Na Apple M5 prva slika (1 spp) se pojavi za oko 0,12 s, 50 spp nakon oko 5 s, a 250 spp nakon oko 24,8 s. `raytracer` za istu sliku treba oko 21,5 s, ali prvu sliku daje tek na kraju. Akumulacija je ukupno nešto sporija jer se nakon svakog prolaza ponovo računa prikazana slika (prosjek i gama korekcija za svaki piksel).
+Na Apple M5 (finalna scena bez velike sfere magle) prva slika (1 spp) se pojavi za oko 0,08 s, 50 spp nakon oko 3,2 s, a 250 spp nakon oko 16,2 s. `raytracer` za istu sliku (`final_scene(400, 250, 4)`) treba oko 13,7 s, ali prvu sliku daje tek na kraju. Akumulacija je ukupno nešto sporija jer se nakon svakog prolaza ponovo računa prikazana slika (prosjek i gama korekcija za svaki piksel).
 
 ## Odabir scene
 
@@ -254,7 +254,8 @@ U `src/main.cc`, u funkciji `main()`, promijeni broj u `switch`:
 Za finalnu scenu parametri su `final_scene(širina, uzorci_po_pikselu, max_dubina)`:
 
 - `final_scene(800, 10000, 40)`: visok kvalitet (traje vrlo dugo)
-- `final_scene(400, 250, 4)`: brza testna verzija (loš kvalitet slike)
+- `final_scene(400, 1000, 20)`: podrazumijevano (`default` u `main.cc`), dobar kvalitet, oko 110 s na Apple M5
+- `final_scene(400, 250, 4)`: brza testna verzija (lošiji kvalitet slike), oko 14 s; s njom su rađena mjerenja u izvještajima
 
 Što su veći `samples_per_pixel` i `max_depth`, slika je kvalitetnija, ali je renderovanje sporije.
 
