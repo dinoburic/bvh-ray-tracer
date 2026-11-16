@@ -59,8 +59,9 @@ inline hittable_list final_scene_world() {
     auto boundary = make_shared<sphere>(point3(360,150,145), 70, make_shared<dielectric>(1.5));
     world.add(boundary);
     world.add(make_shared<constant_medium>(boundary, 0.2, color(0.2, 0.4, 0.9)));
-    boundary = make_shared<sphere>(point3(0,0,0), 5000, make_shared<dielectric>(1.5));
-    world.add(make_shared<constant_medium>(boundary, .0001, color(1,1,1)));
+    // The book also wraps the whole scene in a thin fog (sphere of radius 5000, density 0.0001).
+    // We removed it: it made the black background grey and very noisy (rays scatter in the
+    // fog and only rarely reach the small light) and slowed rendering down by about 33 %.
 
     auto emat = make_shared<lambertian>(make_shared<image_texture>("earthmap.jpg"));
     world.add(make_shared<sphere>(point3(400,200,400), 100, emat));

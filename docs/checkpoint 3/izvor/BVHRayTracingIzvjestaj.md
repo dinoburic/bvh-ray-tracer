@@ -24,6 +24,9 @@ abstract: |
   presjeka zrake sa scenom. Dodali smo i interaktivni pregled s vremenskom
   akumulacijom (temporal accumulation) i ograničavanjem svijetlih uzoraka (clamp).
   Akumulacija daje sliku odmah, ali ne čisti sliku brže od klasičnog renderovanja.
+  Na kraju smo iz finalne scene izbacili veliku sferu magle, koja je pravila
+  najveći dio šuma u pozadini, čime je renderovanje postalo oko 36 % brže, i
+  podigli podrazumijevani kvalitet slike na 1000 uzoraka po pikselu i dubinu 20.
 
 references:
   - "Shirley, P., Black, T. D., Hollasch, S. Ray Tracing: The Next Week. raytracing.github.io/books/RayTracingTheNextWeek.html."
@@ -77,6 +80,8 @@ I animacija se, kao i `raytracer`, renderuje sekvencijalno na jednoj niti. Progr
 
 Profilisali smo finalnu scenu (scena 9) u brzoj testnoj verziji: 400 × 400 piksela,
 250 uzoraka po pikselu i dubina 4, s uključenim BVH-om. Program radi na jednoj niti.
+Sva mjerenja u ovoj i sljedećoj sekciji urađena su na originalnoj sceni, prije
+uklanjanja sfere magle opisanog u sekciji 5.
 
 ## Apple M5
 
@@ -205,6 +210,56 @@ dio svjetlosti gubi. Pokazalo se da većina šuma ne dolazi od pojedinačnih svi
 uzoraka, nego od toga što premalo uzoraka uopšte pogodi svjetlo. Zato clamp ostaje
 samo pomoćna opcija, a po defaultu je isključen.
 
+# Uklanjanje sfere magle
+
+Tražeći uzrok šuma, primijetili smo da finalna scena iz knjige [1] cijelu scenu
+obavija velikom sferom magle (poluprečnik 5000, gustina 0,0001). Kroz nju prolazi
+svaka zraka. Pozadina scene je crna, pa pozadina dobija svjetlo samo kad se zraka
+rasprši u magli i nakon toga slučajno pogodi malo svjetlo. To se dešava rijetko,
+pa je pozadina siva i zrnasta. Uporedili smo istu sliku sa i bez te sfere (tabela 6
+i slika 4).
+
+| Scena | Šum u pozadini | Šum na podu | Vrijeme (300 × 300, 300 uzoraka) |
+|-------|---------------:|------------:|---------------------------------:|
+| s maglom | 23,95 | 14,81 | 24,7 s |
+| bez magle | 0,93 | 14,19 | 16,5 s |
+
+: Uticaj velike sfere magle na šum i vrijeme renderovanja.
+
+![Ista slika s maglom (lijevo) i bez magle (desno), 300 uzoraka po pikselu.](magla_poredjenje.png){width=13cm}
+
+Bez magle je pozadina potpuno crna i bez šuma, dok je šum na podu i sferama skoro
+isti, jer on dolazi od malog svjetla. Magla je usporavala i renderovanje, jer se za
+svaku zraku poziva `constant_medium::hit`, što se vidjelo i u profilu (8,2 %).
+Zato smo je izbacili iz koda (`scenes.h`). Mala plava staklena sfera s maglom unutra
+je ostala. Nakon izmjene `raytracer` za brzu verziju finalne scene treba 13,7 s
+umjesto 21,4 s, a `interactive` dostiže 250 uzoraka za 16,2 s umjesto 24,8 s. Ovo
+je odstupanje od scene iz knjige, pa su mjerenja iz Checkpointa 2 i sekcija 3 i 4
+rađena na sceni s maglom i nisu direktno uporediva s novim.
+
+# Podrazumijevani kvalitet slike
+
+Na kraju smo u sva tri programa podigli podrazumijevani broj uzoraka po pikselu na
+1000 i maksimalnu dubinu zrake na 20 (tabela 7), da bi slika bez dodatnih opcija
+bila čistija.
+
+| Program | Prije | Sada |
+|---------|-------|------|
+| `raytracer` | 250 uzoraka, dubina 4 | 1000 uzoraka, dubina 20 |
+| `animation` | 50 uzoraka, dubina 8 | 1000 uzoraka, dubina 20 |
+| `interactive` | do 1000 uzoraka, dubina 10 | do 1000 uzoraka, dubina 20 |
+
+: Podrazumijevani broj uzoraka po pikselu i dubina zrake.
+
+Na sceni bez magle `raytracer` s novim postavkama treba 110 s na Apple M5, umjesto
+13,7 s. Rezultat je na slici 5. Šum je vidno manji nego na slikama iz sekcija 4 i 5,
+ali se renderovanje produžilo oko osam puta. Animacija od 72 frejma s ovim postavkama
+trajala bi oko 2,2 sata, pa ćemo je renderovati tek nakon paralelizacije. Mjerenja u
+ovom izvještaju i dalje su rađena s brzom verzijom (250 uzoraka, dubina 4), jer je
+ona dovoljna za poređenje vremena.
+
+![Finalna scena bez magle, 1000 uzoraka po pikselu i dubina 20 (110 s na Apple M5).](render_1000spp_dubina20.png){width=9cm}
+
 # Naredni koraci
 
 - Paralelizacija renderovanja po redovima slike. Pikseli su međusobno nezavisni, pa
@@ -213,8 +268,8 @@ samo pomoćna opcija, a po defaultu je isključen.
   više niti.
 - Provjera da kopiranje `shared_ptr` pri svakom pogotku ne usporava niti, jer se
   pri tome atomski mijenja zajednički brojač referenci.
-- Ponovno profilisanje na AMD računaru s debug simbolima, da bi se vidjela imena
-  metoda.
+- Ponovno profilisanje na oba računara na sceni bez magle, na AMD računaru s debug
+  simbolima, da bi se vidjela imena metoda.
 - Mjerenje ubrzanja paralelne verzije za različit broj niti na oba računara.
 - Uzorkovanje svjetla (light sampling), da bi se dobila čistija slika s istim brojem
   uzoraka.

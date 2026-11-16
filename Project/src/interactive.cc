@@ -46,7 +46,7 @@
 
 struct settings {
     int         width   = 400;    // image width = height (the scene is square)
-    int         depth   = 10;     // max ray bounces
+    int         depth   = 20;     // max ray bounces
     int         max_spp = 1000;   // stop accumulating after this many samples per pixel
     double      clamp   = 0;      // max brightness of one sample, 0 = no clamping
     std::string out_dir = "output";
@@ -57,7 +57,7 @@ static void print_usage() {
     std::clog <<
         "Usage: interactive [options]\n"
         "  --width W     image width/height in pixels (default 400)\n"
-        "  --depth D     max ray depth (default 10)\n"
+        "  --depth D     max ray depth (default 20)\n"
         "  --max-spp N   stop accumulating at N samples per pixel (default 1000)\n"
         "  --clamp C     limit the brightness of each sample to C, removes bright dots\n"
         "                (fireflies) but darkens slightly; try 3 (default 0 = off)\n"

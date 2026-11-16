@@ -42,8 +42,8 @@
 struct settings {
     int         frames    = 72;     // number of frames in one full fly-around
     int         width     = 400;    // frame width = height (the scene is square)
-    int         spp       = 50;     // samples per pixel
-    int         depth     = 8;      // max ray bounces
+    int         spp       = 1000;   // samples per pixel
+    int         depth     = 20;     // max ray bounces
     int         fps       = 24;     // playback speed in the window
     int         threads   = 1;      // render threads (1 = sequential); 0 = all hardware threads
     std::string out_dir   = "output/frames";
@@ -55,8 +55,8 @@ static void print_usage() {
         "Usage: animation [options]\n"
         "  --frames N    number of frames (default 72)\n"
         "  --width W     frame width/height in pixels (default 400)\n"
-        "  --spp S       samples per pixel (default 50)\n"
-        "  --depth D     max ray depth (default 8)\n"
+        "  --spp S       samples per pixel (default 1000)\n"
+        "  --depth D     max ray depth (default 20)\n"
         "  --fps F       playback speed in the window (default 24)\n"
         "  --threads T   render threads, 0 = all cores (default 1)\n"
         "  --out DIR     folder for PNG frames (default output/frames)\n"
