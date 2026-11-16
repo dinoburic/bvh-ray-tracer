@@ -24,6 +24,8 @@ abstract: |
   presjeka zrake sa scenom. Dodali smo i interaktivni pregled s vremenskom
   akumulacijom (temporal accumulation) i ograničavanjem svijetlih uzoraka (clamp).
   Akumulacija daje sliku odmah, ali ne čisti sliku brže od klasičnog renderovanja.
+  Na kraju smo iz finalne scene izbacili veliku sferu magle, koja je pravila
+  najveći dio šuma u pozadini, čime je renderovanje postalo oko 36 % brže.
 
 references:
   - "Shirley, P., Black, T. D., Hollasch, S. Ray Tracing: The Next Week. raytracing.github.io/books/RayTracingTheNextWeek.html."
@@ -77,6 +79,8 @@ I animacija se, kao i `raytracer`, renderuje sekvencijalno na jednoj niti. Progr
 
 Profilisali smo finalnu scenu (scena 9) u brzoj testnoj verziji: 400 × 400 piksela,
 250 uzoraka po pikselu i dubina 4, s uključenim BVH-om. Program radi na jednoj niti.
+Sva mjerenja u ovoj i sljedećoj sekciji urađena su na originalnoj sceni, prije
+uklanjanja sfere magle opisanog u sekciji 5.
 
 ## Apple M5
 
@@ -205,6 +209,33 @@ dio svjetlosti gubi. Pokazalo se da većina šuma ne dolazi od pojedinačnih svi
 uzoraka, nego od toga što premalo uzoraka uopšte pogodi svjetlo. Zato clamp ostaje
 samo pomoćna opcija, a po defaultu je isključen.
 
+# Uklanjanje sfere magle
+
+Tražeći uzrok šuma, primijetili smo da finalna scena iz knjige [1] cijelu scenu
+obavija velikom sferom magle (poluprečnik 5000, gustina 0,0001). Kroz nju prolazi
+svaka zraka. Pozadina scene je crna, pa pozadina dobija svjetlo samo kad se zraka
+rasprši u magli i nakon toga slučajno pogodi malo svjetlo. To se dešava rijetko,
+pa je pozadina siva i zrnasta. Uporedili smo istu sliku sa i bez te sfere (tabela 6
+i slika 4).
+
+| Scena | Šum u pozadini | Šum na podu | Vrijeme (300 × 300, 300 uzoraka) |
+|-------|---------------:|------------:|---------------------------------:|
+| s maglom | 23,95 | 14,81 | 24,7 s |
+| bez magle | 0,93 | 14,19 | 16,5 s |
+
+: Uticaj velike sfere magle na šum i vrijeme renderovanja.
+
+![Ista slika s maglom (lijevo) i bez magle (desno), 300 uzoraka po pikselu.](magla_poredjenje.png){width=13cm}
+
+Bez magle je pozadina potpuno crna i bez šuma, dok je šum na podu i sferama skoro
+isti, jer on dolazi od malog svjetla. Magla je usporavala i renderovanje, jer se za
+svaku zraku poziva `constant_medium::hit`, što se vidjelo i u profilu (8,2 %).
+Zato smo je izbacili iz koda (`scenes.h`). Mala plava staklena sfera s maglom unutra
+je ostala. Nakon izmjene `raytracer` za brzu verziju finalne scene treba 13,7 s
+umjesto 21,4 s, a `interactive` dostiže 250 uzoraka za 16,2 s umjesto 24,8 s. Ovo
+je odstupanje od scene iz knjige, pa su mjerenja iz Checkpointa 2 i sekcija 3 i 4
+rađena na sceni s maglom i nisu direktno uporediva s novim.
+
 # Naredni koraci
 
 - Paralelizacija renderovanja po redovima slike. Pikseli su međusobno nezavisni, pa
@@ -213,8 +244,8 @@ samo pomoćna opcija, a po defaultu je isključen.
   više niti.
 - Provjera da kopiranje `shared_ptr` pri svakom pogotku ne usporava niti, jer se
   pri tome atomski mijenja zajednički brojač referenci.
-- Ponovno profilisanje na AMD računaru s debug simbolima, da bi se vidjela imena
-  metoda.
+- Ponovno profilisanje na oba računara na sceni bez magle, na AMD računaru s debug
+  simbolima, da bi se vidjela imena metoda.
 - Mjerenje ubrzanja paralelne verzije za različit broj niti na oba računara.
 - Uzorkovanje svjetla (light sampling), da bi se dobila čistija slika s istim brojem
   uzoraka.
